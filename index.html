@@ -46,21 +46,6 @@ html, body {
   line-height: 1.45;
   width: 280px;
 }
-
-#closeBtn {
-  position: fixed;
-  bottom: 22px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 999999;
-  background: rgba(255, 212, 0, 0.95);
-  color: #111;
-  border: none;
-  border-radius: 24px;
-  padding: 12px 22px;
-  font-size: 16px;
-  font-weight: bold;
-}
 </style>
 </head>
 
@@ -71,11 +56,8 @@ html, body {
   카메라에 비춰 주세요
 </div>
 
-<button id="closeBtn" onclick="stopCameraAndClose()">
-  AR 종료
-</button>
-
 <a-scene
+  id="arScene"
   mindar-image="imageTargetSrc: ./s2_targets.mind;"
   embedded
   color-space="sRGB"
@@ -104,6 +86,7 @@ html, body {
 <script>
 const guide = document.getElementById("guide");
 const target = document.getElementById("target");
+const sceneEl = document.getElementById("arScene");
 
 target.addEventListener("targetFound", () => {
   guide.innerHTML = "모임 문화 변화<br>AR 정보가 표시되었습니다";
@@ -113,44 +96,51 @@ target.addEventListener("targetLost", () => {
   guide.innerHTML = "소양강 처녀상 이미지를<br>카메라에 비춰 주세요";
 });
 
-function stopCamera() {
-  const videos = document.querySelectorAll("video");
-
-  videos.forEach(video => {
-    if (video.srcObject) {
-      const tracks = video.srcObject.getTracks();
-      tracks.forEach(track => track.stop());
-      video.srcObject = null;
+function stopAllCameras() {
+  try {
+    const mindarSystem = sceneEl.systems["mindar-image-system"];
+    if (mindarSystem && mindarSystem.stop) {
+      mindarSystem.stop();
     }
-  });
+  } catch (e) {}
 
-  if (window.MINDAR_IMAGE_SYSTEM) {
-    try {
-      window.MINDAR_IMAGE_SYSTEM.stop();
-    } catch (e) {}
-  }
+  try {
+    const videos = document.querySelectorAll("video");
+    videos.forEach(video => {
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => {
+          try { track.stop(); } catch (e) {}
+        });
+        video.srcObject = null;
+      }
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    });
+  } catch (e) {}
+
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          stream.getTracks().forEach(track => track.stop());
+        })
+        .catch(() => {});
+    }
+  } catch (e) {}
 }
 
-function stopCameraAndClose() {
-  stopCamera();
+window.addEventListener("pagehide", stopAllCameras);
+window.addEventListener("beforeunload", stopAllCameras);
 
-  guide.innerHTML = "AR 카메라를 종료했습니다";
-
-  setTimeout(() => {
-    if (history.length > 1) {
-      history.back();
-    } else {
-      location.href = "about:blank";
-    }
-  }, 500);
-}
-
-window.addEventListener("pagehide", stopCamera);
-window.addEventListener("beforeunload", stopCamera);
-window.addEventListener("visibilitychange", () => {
+document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
-    stopCamera();
+    stopAllCameras();
   }
+});
+
+window.addEventListener("blur", () => {
+  stopAllCameras();
 });
 </script>
 
